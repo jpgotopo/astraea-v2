@@ -278,3 +278,53 @@ transcrito no se pierde, porque queda persistido de forma incremental.
 - Regresión con Playwright: alta/borrado de Personas y banner de error del
   motor (con la red bloqueada) siguen funcionando igual que en la pasada
   anterior.
+
+---
+
+## 💾 Cuarta pasada: respaldo completo (export/import de toda la base)
+
+Última recomendación pendiente de la revisión original: no había forma de
+respaldar o mover todos los datos (proyectos, personas, sesiones, audios y
+transcripciones) a otro dispositivo — solo se podía exportar el texto de
+una sesión a la vez.
+
+**Implementación** (`src/utils/db.js`: `exportBackup()` / `importBackup()`,
+tres botones nuevos en el encabezado):
+
+- **Exportar respaldo**: descarga un único archivo `.json` con el contenido
+  completo de `AstraeaDB` (proyectos, personas, sesiones, audios y
+  transcripciones legado). Los audios (`Blob`) se serializan como *data URLs*
+  base64 — sin depender de ninguna librería nueva (`FileReader`/`fetch()` del
+  navegador alcanzan para ambas direcciones).
+- **Importar (combinar)**: agrega el contenido del respaldo a lo que ya hay
+  en el dispositivo, **sin tocar nada existente**. Como los ids de
+  IndexedDB (`autoIncrement`) solo son únicos por dispositivo, reusar los ids
+  del respaldo tal cual podría sobrescribir silenciosamente registros locales
+  no relacionados que compartieran el mismo id. Por eso, en este modo se
+  descartan los ids originales (dejando que el store asigne unos nuevos) y se
+  **remapean** `projectId`/`personId` de cada sesión importada para que sigan
+  apuntando al proyecto/persona correctos ya con sus nuevos ids.
+- **Importar (reemplazar todo)**: borra todo lo del dispositivo y lo
+  reemplaza exactamente por el contenido del archivo — para restaurar un
+  respaldo completo en un dispositivo nuevo o vacío. Pide confirmación
+  explícita antes de borrar, por ser destructivo.
+
+### ✅ Validación
+
+- `npm run lint` → 0 errores, 0 warnings.
+- `npm run build` → build de producción exitosa.
+- Prueba de extremo a extremo con Playwright (sembrando datos directo en
+  IndexedDB, incluida una sesión con audio real en `audio` y en
+  `segments[].audioBlob`):
+  - Exportar → el JSON resultante tiene la estructura esperada y el audio
+    queda como *data URL* (`data:audio/wav;base64,...`).
+  - Importar el mismo respaldo en modo **combinar** → los conteos de
+    proyectos/personas/sesiones se duplican (1→2) sin sobrescribir nada; la
+    sesión importada quedó vinculada al proyecto y persona **nuevos** (ids
+    remapeados correctamente); el audio se recuperó como `Blob` real, mismo
+    tamaño (8 bytes) y mismo `type` (`audio/wav`) que el original.
+  - Importar el mismo respaldo en modo **reemplazar** → aparece el diálogo
+    de confirmación destructiva; tras aceptar, los conteos vuelven
+    exactamente a los del archivo de respaldo (1/1/1), descartando los datos
+    duplicados del paso anterior.
+- Regresión: alta/borrado de Personas sigue funcionando sin cambios.

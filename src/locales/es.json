@@ -11,6 +11,18 @@
         "engineErrorTitle": "El motor de transcripción tuvo un problema",
         "retryBtn": "Reintentar"
     },
+    "backup": {
+        "exportBtn": "⬇ Exportar respaldo",
+        "exportHint": "Descarga un solo archivo con todos los proyectos, personas, sesiones, grabaciones y transcripciones — para respaldo o para pasar los datos a otro dispositivo.",
+        "importMergeBtn": "⬆ Importar (combinar)",
+        "importMergeHint": "Agrega el contenido de un archivo de respaldo a lo que ya existe en este dispositivo. No se borra ni sobrescribe nada de lo que ya hay aquí.",
+        "importReplaceBtn": "⬆ Importar (reemplazar todo)",
+        "importReplaceHint": "Borra todo lo que hay en este dispositivo y lo reemplaza con el contenido del archivo de respaldo.",
+        "confirmReplace": "Esto borrará permanentemente todos los proyectos, personas y sesiones actuales de este dispositivo y los reemplazará con el contenido del archivo de respaldo. Esta acción no se puede deshacer. ¿Continuar?",
+        "importSuccess": "Respaldo importado correctamente.",
+        "importError": "No se pudo importar este archivo. Asegúrate de que sea un archivo de respaldo válido de Astraea.",
+        "exportError": "No se pudo crear el archivo de respaldo."
+    },
     "tabs": {
         "projects": "Proyectos",
         "people": "Personas",

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TranscriptionWorker from './workers/transcriptionWorker?worker';
 import { processAudioForModel, cleanIpaOutput, float32ToWav } from './utils/audioUtils';
-import { saveData, getAllData, deleteData, getDataById } from './utils/db';
+import { saveData, getAllData, deleteData, getDataById, exportBackup, importBackup } from './utils/db';
 
 import { useTranslation } from 'react-i18next';
 
@@ -250,6 +250,70 @@ function App() {
     segmentsRef.current = [];
   };
 
+  // Backup / restore (full database export-import, for device-to-device migration)
+  const backupFileInputRef = useRef(null);
+  const pendingImportModeRef = useRef('merge');
+
+  const handleExportBackup = async () => {
+    try {
+      const backup = await exportBackup();
+      const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `astraea-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Backup export failed:', err);
+      alert(t('backup.exportError'));
+    }
+  };
+
+  const triggerImport = (mode) => {
+    pendingImportModeRef.current = mode;
+    backupFileInputRef.current?.click();
+  };
+
+  const reloadAllData = async () => {
+    const [savedProjects, savedPeople, savedSessions] = await Promise.all([
+      getAllData('projects'), getAllData('people'), getAllData('sessions')
+    ]);
+    setProjects(savedProjects);
+    setPeople(savedPeople);
+    setSessions(savedSessions);
+    return { savedProjects, savedPeople, savedSessions };
+  };
+
+  const handleImportBackupFile = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = ''; // allow re-selecting the same file again later
+    if (!file) return;
+    const mode = pendingImportModeRef.current;
+    if (mode === 'replace' && !window.confirm(t('backup.confirmReplace'))) return;
+
+    try {
+      const payload = JSON.parse(await file.text());
+      await importBackup(payload, { mode });
+      const { savedProjects } = await reloadAllData();
+      if (mode === 'replace') {
+        // The records currently open on screen may no longer exist (or may
+        // not even be the same records anymore) after a full replace.
+        setCurrentProject(savedProjects[0] || null);
+        setCurrentPerson(null);
+        setCurrentSession(null);
+        setTranscript('');
+        setTranslation('');
+        setSegments([]);
+        segmentsRef.current = [];
+      }
+      alert(t('backup.importSuccess'));
+    } catch (err) {
+      console.error('Backup import failed:', err);
+      alert(t('backup.importError'));
+    }
+  };
+
   // Recording Logic
   const startRecording = async () => {
     if (!currentSession?.id) return alert(t('sessions.alertNoSession'));
@@ -326,7 +390,7 @@ function App() {
     <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
       <main style={{ width: '100%' }}>
         <header style={{ marginBottom: '3rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ alignSelf: 'flex-end' }}>
+          <div style={{ alignSelf: 'flex-end', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem' }}>
             <div style={{ display: 'flex', gap: '1rem' }}>
               <select
                 value={i18n.language.substring(0, 2)}
@@ -339,6 +403,18 @@ function App() {
               </select>
               <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '1rem' }}>
                 {theme === 'light' ? t('app.themeLight') : t('app.themeDark')}
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <input type="file" accept="application/json" ref={backupFileInputRef} onChange={handleImportBackupFile} style={{ display: 'none' }} />
+              <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.75rem' }} onClick={handleExportBackup} title={t('backup.exportHint')}>
+                {t('backup.exportBtn')}
+              </button>
+              <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.75rem' }} onClick={() => triggerImport('merge')} title={t('backup.importMergeHint')}>
+                {t('backup.importMergeBtn')}
+              </button>
+              <button className="btn-secondary danger" style={{ padding: '0.5rem 1rem', fontSize: '0.75rem' }} onClick={() => triggerImport('replace')} title={t('backup.importReplaceHint')}>
+                {t('backup.importReplaceBtn')}
               </button>
             </div>
           </div>

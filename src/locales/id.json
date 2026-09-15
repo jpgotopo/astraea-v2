@@ -11,6 +11,18 @@
         "engineErrorTitle": "Mesin transkripsi mengalami masalah",
         "retryBtn": "Coba Lagi"
     },
+    "backup": {
+        "exportBtn": "⬇ Ekspor cadangan",
+        "exportHint": "Unduh satu file berisi semua proyek, orang, sesi, rekaman, dan transkrip — untuk cadangan atau memindahkan data ke perangkat lain.",
+        "importMergeBtn": "⬆ Impor (gabungkan)",
+        "importMergeHint": "Menambahkan isi file cadangan ke data yang sudah ada di perangkat ini. Tidak ada yang dihapus atau ditimpa.",
+        "importReplaceBtn": "⬆ Impor (ganti semua)",
+        "importReplaceHint": "Menghapus semua data di perangkat ini dan menggantinya dengan isi file cadangan.",
+        "confirmReplace": "Ini akan menghapus secara permanen semua proyek, orang, dan sesi yang ada di perangkat ini dan menggantinya dengan isi file cadangan. Tindakan ini tidak dapat dibatalkan. Lanjutkan?",
+        "importSuccess": "Cadangan berhasil diimpor.",
+        "importError": "File ini tidak dapat diimpor. Pastikan ini adalah file cadangan Astraea yang valid.",
+        "exportError": "Gagal membuat file cadangan."
+    },
     "tabs": {
         "projects": "Proyek",
         "people": "Orang",

@@ -11,6 +11,18 @@
         "engineErrorTitle": "The transcription engine ran into a problem",
         "retryBtn": "Retry"
     },
+    "backup": {
+        "exportBtn": "⬇ Export backup",
+        "exportHint": "Download a single file with every project, person, session, recording and transcript — for backup or moving to another device.",
+        "importMergeBtn": "⬆ Import (merge)",
+        "importMergeHint": "Add the contents of a backup file to what's already on this device. Nothing already here is deleted or overwritten.",
+        "importReplaceBtn": "⬆ Import (replace all)",
+        "importReplaceHint": "Erase everything on this device and replace it with the contents of a backup file.",
+        "confirmReplace": "This will permanently erase every project, person and session currently on this device and replace them with the backup file's contents. This cannot be undone. Continue?",
+        "importSuccess": "Backup imported successfully.",
+        "importError": "Could not import this file. Make sure it's a valid Astraea backup file.",
+        "exportError": "Could not create the backup file."
+    },
     "tabs": {
         "projects": "Projects",
         "people": "People",

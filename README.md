@@ -10,6 +10,7 @@ Astraea is a high-performance, client-side web application designed for linguist
 - **Privacy-First**: All AI processing happens locally in your browser—no audio leaves your device.
 - **Linguistic Focus**: Specialized for documenting low-resource or undocumented languages.
 - **Glassmorphic UI**: A premium, minimalist interface designed for clarity in fieldwork.
+- **Full Backup / Device Migration**: export every project, person, session, recording and transcript to a single file, and import it back — merging with existing data or restoring onto a fresh device.
 
 ## 🛠️ Technology Stack
 
