@@ -131,3 +131,96 @@ del tema oscuro (color por defecto de la app).
 - No hay export/import de la base completa (solo exportación de texto por
   sesión); para un uso de campo real (respaldo entre dispositivos) sería
   valioso un export/import de todo `AstraeaDB`.
+- No hay botón para cancelar una transcripción en curso una vez iniciada.
+
+---
+
+## 🎙️ Segunda pasada: motor de transcripción (`transcriptionWorker.js` / `audioUtils.js`)
+
+Revisión enfocada a pedido del usuario, con las mismas pruebas reales
+(Playwright) — incluyendo, en este caso, aprovechar que el entorno de pruebas
+**no tiene acceso a huggingface.co**, lo cual reproduce exactamente el
+escenario real de un investigador de campo sin conexión en el primer uso.
+
+### 🔴 Los errores del worker se ignoraban por completo
+
+`worker.current.onmessage` en `App.jsx` solo manejaba `progress`, `ready`,
+`segment_start`, `segment_complete` y `complete`. El worker sí emite
+`{ status: 'error', ... }` (fallas de red, de WebGPU/WASM, o de la
+transcripción en sí), pero al no existir esa rama, el mensaje se perdía en
+silencio: la pantalla de carga o el spinner de grabación se quedaban
+congelados para siempre, sin ningún aviso.
+
+**Corrección:** se agregó el caso `status === 'error'`, con un banner visible
+(`app.engineErrorTitle` + el mensaje técnico) y un botón "Reintentar" que
+termina el worker actual y crea uno nuevo desde cero. Verificado en un
+navegador real: con la red bloqueada, el banner aparece automáticamente tras
+la falla, y el botón de reintento crea exactamente un worker nuevo por clic
+(sin duplicados).
+
+### 🔴 El fallback WebGPU→WASM también se disparaba con fallas de red
+
+```js
+this.instance = await pipeline(..., { device: 'webgpu' }).catch(async (err) => {
+    console.warn('WebGPU fallback to WASM:', err.message);
+    return await pipeline(..., { device: 'wasm' });
+});
+```
+
+Esto asumía que cualquier falla del primer intento era por falta de soporte de
+WebGPU, y reintentaba con WASM — incluyendo cuando la falla real era de red
+(`Failed to fetch`). Resultado: sin conexión, la app intentaba descargar el
+modelo **dos veces completas** antes de finalmente reportar el error (que
+además el bug anterior ignoraba).
+
+**Corrección:** se agregó `isNetworkError()` para distinguir errores de
+conectividad de errores de dispositivo/backend. Ante una falla de red, se
+reporta de inmediato sin reintentar con WASM. Verificado: en la prueba con
+red bloqueada, la falla ahora se reporta en un solo intento (antes: dos
+intentos fallidos y silenciosos).
+
+### 🟠 Barra de progreso que saltaba hacia atrás
+
+`progress_callback` de `@huggingface/transformers` reporta el progreso por
+archivo del modelo (tokenizer, config, encoder, decoder…), cada uno de 0 a
+100%. Al reenviar esos eventos tal cual, la barra de progreso avanzaba a
+100% y luego caía de golpe al empezar a descargar el siguiente archivo.
+
+**Corrección:** el worker ahora agrega `loaded`/`total` de todos los archivos
+vistos hasta el momento (`fileProgress` Map) y reporta un porcentaje global
+monótonamente creciente en vez de reenviar el progreso crudo por archivo.
+
+### 🟠 Sin persistencia incremental de segmentos
+
+Los segmentos transcritos solo se guardaban en estado de React; la sesión
+recién se persistía en IndexedDB al recibir el evento final `complete`. Si la
+app se cerraba o recargaba a mitad de una grabación larga, se perdía todo el
+progreso transcrito hasta ese momento.
+
+**Corrección:** se extrajo la lógica de guardado a `persistProgress()` y ahora
+se llama también en cada `segment_complete`, no solo en `complete` — cada
+segmento transcrito queda guardado en IndexedDB de inmediato.
+
+### 🟡 Audio cruzando el worker por copia en vez de por transferencia
+
+`postMessage({ audio: audioBuffer })` (grabación y subida de archivo) y la
+respuesta `segment_complete` del worker mandaban los `Float32Array` por
+*structured clone* (copia completa) en ambas direcciones.
+
+**Corrección:** ambos lados ahora pasan la lista de `transferables`
+(`[buffer]`) a `postMessage`, evitando la copia — el emisor no vuelve a leer
+esos datos después de enviarlos, así que es seguro transferirlos.
+
+### ✅ Validación
+
+- `npm run lint` → 0 errores, 0 warnings.
+- `npm run build` → build de producción exitosa.
+- Playwright contra la app real, con la red a huggingface.co bloqueada
+  (reproduciendo el caso de un usuario sin internet):
+  - Antes de corregir: pantalla de carga congelada indefinidamente, dos
+    intentos de descarga fallidos, cero mensaje de error.
+  - Después de corregir: un solo intento fallido, banner de error visible
+    con el mensaje técnico, botón "Reintentar" funcional (un worker nuevo
+    por clic, sin duplicados).
+- Regresión: se repitió la prueba de alta/borrado de Personas para confirmar
+  que los cambios en `App.jsx` no rompieron nada de la primera pasada.

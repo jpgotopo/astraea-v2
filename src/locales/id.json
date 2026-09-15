@@ -7,7 +7,9 @@
         "initializing": "Menginisialisasi Mesin Fonetik AI",
         "downloading": "Mengunduh Modul Neural...",
         "transcribingSegment": "Menerjemahkan segmen {{index}} dari {{total}}...",
-        "ready": "Siap"
+        "ready": "Siap",
+        "engineErrorTitle": "Mesin transkripsi mengalami masalah",
+        "retryBtn": "Coba Lagi"
     },
     "tabs": {
         "projects": "Proyek",

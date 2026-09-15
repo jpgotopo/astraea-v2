@@ -7,7 +7,9 @@
         "initializing": "Inicializando Motor Fonético de IA",
         "downloading": "Descargando Módulos Neuronales...",
         "transcribingSegment": "Transcribiendo segmento {{index}} de {{total}}...",
-        "ready": "Listo"
+        "ready": "Listo",
+        "engineErrorTitle": "El motor de transcripción tuvo un problema",
+        "retryBtn": "Reintentar"
     },
     "tabs": {
         "projects": "Proyectos",

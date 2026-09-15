@@ -7,7 +7,9 @@
         "initializing": "Initializing AI Phonetics Engine",
         "downloading": "Downloading Neural Modules...",
         "transcribingSegment": "Transcribing segment {{index}} of {{total}}...",
-        "ready": "Ready"
+        "ready": "Ready",
+        "engineErrorTitle": "The transcription engine ran into a problem",
+        "retryBtn": "Retry"
     },
     "tabs": {
         "projects": "Projects",

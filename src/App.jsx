@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TranscriptionWorker from './workers/transcriptionWorker?worker';
 import { processAudioForModel, cleanIpaOutput, float32ToWav } from './utils/audioUtils';
 import { saveData, getAllData, deleteData, getDataById } from './utils/db';
@@ -12,6 +12,7 @@ function App() {
   const [isReady, setIsReady] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Initializing AI...');
+  const [engineError, setEngineError] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
 
   useEffect(() => {
@@ -54,6 +55,90 @@ function App() {
     currentSessionRef.current = currentSession;
   }, [currentSession]);
 
+  // Persists whatever has been transcribed so far for the in-progress session.
+  // Called after every segment (not just on final completion) so a crash,
+  // reload, or low-memory tab kill doesn't wipe out a long recording's progress.
+  const persistProgress = useCallback(async (targetId, partialTranscript) => {
+    if (!targetId) return;
+    const sessionToUpdate = await getDataById('sessions', targetId);
+    if (!sessionToUpdate) return;
+    const updated = {
+      ...sessionToUpdate,
+      transcript: partialTranscript,
+      audio: currentAudioBlob.current,
+      segments: segmentsRef.current
+    };
+    await saveData('sessions', updated);
+    setSessions(prev => prev.map(s => s.id === targetId ? updated : s));
+    if (currentSessionRef.current?.id === targetId) setCurrentSession(updated);
+  }, []);
+
+  // Creates (or recreates, after a failure) the transcription worker and wires
+  // up its message handler. Only touches refs/setters/pure helpers — never
+  // component state directly — so useCallback with no deps keeps it stable
+  // across renders and safe to call again later from the "Retry" button.
+  const startWorker = useCallback(() => {
+    const w = new TranscriptionWorker();
+    w.onmessage = async (event) => {
+      const data = event.data;
+      if (data.status === 'progress') setProgress(data.progress || 0);
+      else if (data.status === 'ready') {
+        setEngineError(null);
+        setIsReady(true);
+      }
+      else if (data.status === 'error') {
+        // The worker can fail while loading the model (network down, WebGPU/WASM
+        // issues) or mid-transcription. Either way, surface it instead of leaving
+        // the UI stuck on a spinner or a frozen progress bar with no explanation.
+        console.error('TranscriptionWorker reported an error:', data.error);
+        setEngineError(data.error || 'Unknown engine error');
+        setIsProcessing(false);
+        setStatus('Ready');
+      }
+      else if (data.status === 'segment_start') {
+        setStatus(`Transcribing segment ${data.index + 1} of ${data.total}...`);
+      }
+      else if (data.status === 'segment_complete') {
+        const audioBlob = float32ToWav(data.audioSegment);
+        const newSegment = {
+          id: Date.now() + Math.random(),
+          audioBlob: audioBlob,
+          transcript: data.text
+        };
+        segmentsRef.current = [...segmentsRef.current, newSegment];
+        setSegments(segmentsRef.current);
+        setTranscript(data.fullTranscript);
+        await persistProgress(recordingSessionId.current, data.fullTranscript);
+      }
+      else if (data.status === 'complete') {
+        setIsProcessing(false);
+        setStatus('Ready');
+        const result = cleanIpaOutput(data.output);
+        setTranscript(result);
+
+        // Save using the ID when recording STARTED
+        const targetId = recordingSessionId.current;
+        if (targetId) {
+          await persistProgress(targetId, result);
+          recordingSessionId.current = null;
+        }
+      }
+    };
+    w.postMessage({ cmd: 'load' });
+    return w;
+  }, [persistProgress]);
+
+  // Terminates the current (possibly stuck or failed) worker and starts a
+  // fresh one, resetting the loading UI. Exposed to the user via the error
+  // banner's retry button.
+  const handleRetryEngine = () => {
+    worker.current?.terminate();
+    setEngineError(null);
+    setIsReady(false);
+    setProgress(0);
+    worker.current = startWorker();
+  };
+
   useEffect(() => {
     const initData = async () => {
       const savedProjects = await getAllData('projects');
@@ -68,54 +153,9 @@ function App() {
     };
     initData();
 
-    worker.current = new TranscriptionWorker();
-    worker.current.onmessage = async (event) => {
-      const data = event.data;
-      if (data.status === 'progress') setProgress(data.progress || 0);
-      else if (data.status === 'ready') setIsReady(true);
-      else if (data.status === 'segment_start') {
-        setStatus(`Transcribing segment ${data.index + 1} of ${data.total}...`);
-      }
-      else if (data.status === 'segment_complete') {
-        const audioBlob = float32ToWav(data.audioSegment);
-        const newSegment = {
-          id: Date.now() + Math.random(),
-          audioBlob: audioBlob,
-          transcript: data.text
-        };
-        segmentsRef.current = [...segmentsRef.current, newSegment];
-        setSegments(segmentsRef.current);
-        setTranscript(data.fullTranscript);
-      }
-      else if (data.status === 'complete') {
-        setIsProcessing(false);
-        setStatus('Ready');
-        const result = cleanIpaOutput(data.output);
-        setTranscript(result);
-
-        // Save using the ID when recording STARTED
-        const targetId = recordingSessionId.current;
-        if (targetId) {
-          const sessionToUpdate = await getDataById('sessions', targetId);
-          if (sessionToUpdate) {
-            const updated = {
-              ...sessionToUpdate,
-              transcript: result,
-              audio: currentAudioBlob.current,
-              segments: segmentsRef.current
-            };
-            // Use functional update or ref for segments to be safe, but let's try this first
-            await saveData('sessions', updated);
-            setSessions(prev => prev.map(s => s.id === targetId ? updated : s));
-            if (currentSessionRef.current?.id === targetId) setCurrentSession(updated);
-          }
-          recordingSessionId.current = null;
-        }
-      }
-    };
-    worker.current.postMessage({ cmd: 'load' });
+    worker.current = startWorker();
     return () => worker.current.terminate();
-  }, []);
+  }, [startWorker]);
 
   // Project Functions
   const handleSaveProject = async (e) => {
@@ -211,7 +251,11 @@ function App() {
       currentAudioBlob.current = audioBlob;
       setIsProcessing(true);
       const audioBuffer = await processAudioForModel(audioBlob);
-      worker.current.postMessage({ audio: audioBuffer });
+      // Transfer the underlying buffers instead of letting postMessage clone
+      // them: audioBuffer is an array of Float32Array segments that can be
+      // sizeable for long recordings, and it isn't read again after this call.
+      const transferables = (Array.isArray(audioBuffer) ? audioBuffer : [audioBuffer]).map(seg => seg.buffer);
+      worker.current.postMessage({ audio: audioBuffer }, transferables);
     };
     mediaRecorder.current.start();
     setIsRecording(true);
@@ -237,7 +281,8 @@ function App() {
 
     try {
       const audioBuffer = await processAudioForModel(file);
-      worker.current.postMessage({ audio: audioBuffer });
+      const transferables = (Array.isArray(audioBuffer) ? audioBuffer : [audioBuffer]).map(seg => seg.buffer);
+      worker.current.postMessage({ audio: audioBuffer }, transferables);
     } catch (error) {
       console.error("Error processing uploaded file:", error);
       alert(t('sessions.alertProcessError'));
@@ -292,7 +337,15 @@ function App() {
           <button className={`tab-btn ${activeTab === 'sessions' ? 'active' : ''}`} onClick={() => setActiveTab('sessions')}>{t('tabs.sessions')}</button>
         </nav>
 
-        {!isReady && (
+        {engineError && (
+          <div className="glass-card" style={{ textAlign: 'center', marginBottom: '3rem', padding: '2rem', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+            <h2 style={{ marginTop: 0, color: '#ef4444' }}>{t('app.engineErrorTitle')}</h2>
+            <p className="status-label" style={{ wordBreak: 'break-word' }}>{engineError}</p>
+            <button type="button" className="btn-secondary danger" style={{ marginTop: '1rem' }} onClick={handleRetryEngine}>{t('app.retryBtn')}</button>
+          </div>
+        )}
+
+        {!isReady && !engineError && (
           <div className="glass-card" style={{ textAlign: 'center', marginBottom: '3rem', padding: '3rem' }}>
             <h2 style={{ marginTop: 0 }}>{t('app.initializing')}</h2>
             <div className="progress-container"><div className="progress-bar" style={{ width: `${progress}%` }}></div></div>
