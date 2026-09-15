@@ -117,7 +117,14 @@ self.onmessage = async (event) => {
                 const output = await transcriber(segment, {
                     chunk_length_s: 30,
                     stride_length_s: 5,
-                    language: 'en',
+                    // No `language` here on purpose: this is a multilingual Whisper
+                    // fine-tune (neurlang/ipa-whisper-base, trained on 70+ languages),
+                    // and its own model card explicitly unforces the decoder's
+                    // language token (`forced_decoder_ids = None`) so Whisper
+                    // auto-detects the spoken language per segment instead of being
+                    // pinned to English — forcing `language: 'en'` here would bias
+                    // decoding towards English phonology for every other language,
+                    // defeating the point of a "universal" phonetic transcriber.
                     task: 'transcribe',
                     return_timestamps: false,
                     max_new_tokens: 448,

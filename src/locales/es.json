@@ -118,6 +118,7 @@
         "updateBtn": "Actualizar Metadatos",
         "createBtn": "Crear Sesión para empezar a grabar",
         "recordingState": "• GRABANDO...",
+        "cancelProcessingBtn": "Cancelar",
         "readyState": "LISTO PARA GRABAR",
         "processingState": "PROCESANDO...",
         "transcriptionTitle": "Transcripción y Traducción",

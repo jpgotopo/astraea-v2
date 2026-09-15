@@ -224,3 +224,57 @@ esos datos después de enviarlos, así que es seguro transferirlos.
     por clic, sin duplicados).
 - Regresión: se repitió la prueba de alta/borrado de Personas para confirmar
   que los cambios en `App.jsx` no rompieron nada de la primera pasada.
+
+---
+
+## 🎙️ Tercera pasada: idioma forzado y cancelación
+
+### 🟡 `language: 'en'` fijo — confirmado contra la propia tarjeta del modelo
+
+En la revisión anterior quedó como "a confirmar". Se consultó la tarjeta
+oficial de [`onnx-community/ipa-whisper-base-ONNX`](https://huggingface.co/onnx-community/ipa-whisper-base-ONNX)
+(fine-tune de `neurlang/ipa-whisper-base`, un Whisper multilingüe entrenado en
+15 000 audios de Common Voice en **70+ idiomas**, listado con más de 90 tags
+de idioma). El propio ejemplo de uso recomendado en la tarjeta del modelo
+**des-fuerza explícitamente** el token de idioma del decodificador:
+
+```python
+model.config.forced_decoder_ids = None
+model.generation_config.forced_decoder_ids = None
+```
+
+Es decir: el autor del modelo espera que Whisper **auto-detecte el idioma**
+por segmento, no que se fije uno. Forzar `language: 'en'` (como hacía el
+código) va en contra del uso documentado del propio modelo y sesga la
+decodificación hacia fonología inglesa en cualquier otro idioma — justo lo
+opuesto al objetivo de un transcriptor fonético "universal".
+
+**Corrección:** se quitó `language: 'en'` de la llamada a `transcriber()` en
+`transcriptionWorker.js`, dejando `task: 'transcribe'` (que sí conviene forzar,
+para que nunca decida traducir en vez de transcribir). Whisper ahora
+auto-detecta el idioma de cada segmento, como indica la documentación oficial
+del modelo.
+
+### 🟡 Sin botón de cancelar una transcripción en curso
+
+No había forma de detener una transcripción larga una vez iniciada; el único
+recurso era esperar o recargar la página (perdiendo el progreso — aunque tras
+la pasada anterior eso ya no ocurre, gracias a la persistencia incremental).
+
+**Corrección:** se agregó un botón "Cancelar" junto al indicador de estado
+mientras `isProcessing` está activo. `transformers.js`/ONNX Runtime no expone
+una forma de abortar una sola llamada de inferencia en curso, así que la
+única manera confiable de detenerla es terminar el worker por completo y
+levantar uno nuevo (se reutiliza la misma lógica que ya usa el botón
+"Reintentar" del motor, factorizada en `restartWorker()`). El modelo se
+recarga, pero al estar cacheado por el navegador (y por el service worker de
+la PWA) esto debería ser prácticamente instantáneo tras el primer uso. Lo ya
+transcrito no se pierde, porque queda persistido de forma incremental.
+
+### ✅ Validación
+
+- `npm run lint` → 0 errores, 0 warnings.
+- `npm run build` → build de producción exitosa.
+- Regresión con Playwright: alta/borrado de Personas y banner de error del
+  motor (con la red bloqueada) siguen funcionando igual que en la pasada
+  anterior.

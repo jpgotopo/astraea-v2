@@ -118,6 +118,7 @@
         "updateBtn": "Perbarui Metadata",
         "createBtn": "Buat Sesi untuk Memulai Perekaman",
         "recordingState": "• MEREKAM...",
+        "cancelProcessingBtn": "Batalkan",
         "readyState": "SIAP MEREKAM",
         "processingState": "MEMPROSES...",
         "transcriptionTitle": "Transkripsi & Terjemahan",

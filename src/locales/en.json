@@ -118,6 +118,7 @@
         "updateBtn": "Update Metadata",
         "createBtn": "Create Session to Start Recording",
         "recordingState": "• RECORDING...",
+        "cancelProcessingBtn": "Cancel",
         "readyState": "READY TO RECORD",
         "processingState": "PROCESSING...",
         "transcriptionTitle": "Transcription & Translation",

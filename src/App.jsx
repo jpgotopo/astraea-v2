@@ -128,15 +128,30 @@ function App() {
     return w;
   }, [persistProgress]);
 
-  // Terminates the current (possibly stuck or failed) worker and starts a
-  // fresh one, resetting the loading UI. Exposed to the user via the error
-  // banner's retry button.
-  const handleRetryEngine = () => {
+  // Terminates the current (possibly stuck, failed, or mid-transcription)
+  // worker and starts a fresh one, resetting the loading UI. transformers.js
+  // doesn't expose a way to abort a single in-flight inference call, so a
+  // hard restart is the only reliable way to stop it — the model reloads,
+  // but should do so quickly from the browser's cache after the first run.
+  const restartWorker = () => {
     worker.current?.terminate();
     setEngineError(null);
     setIsReady(false);
     setProgress(0);
     worker.current = startWorker();
+  };
+
+  // Exposed via the error banner's retry button.
+  const handleRetryEngine = restartWorker;
+
+  // Exposed via the "Cancel" button shown while a transcription is running.
+  // Whatever was already transcribed is safe either way: segments are
+  // persisted incrementally as they complete (see persistProgress above).
+  const handleCancelProcessing = () => {
+    setIsProcessing(false);
+    setStatus('Ready');
+    recordingSessionId.current = null;
+    restartWorker();
   };
 
   useEffect(() => {
@@ -585,8 +600,18 @@ function App() {
                       </div>
 
                       <div style={{ flex: 1, minWidth: '200px' }}>
-                        <div style={{ color: isRecording ? '#ef4444' : 'var(--primary)', fontWeight: 700, marginBottom: '0.5rem' }}>
+                        <div style={{ color: isRecording ? '#ef4444' : 'var(--primary)', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                           {isRecording ? t('sessions.recordingState') : isProcessing ? status.toUpperCase() : t('sessions.readyState')}
+                          {isProcessing && (
+                            <button
+                              type="button"
+                              className="btn-secondary danger"
+                              style={{ padding: '0.35rem 0.9rem', fontSize: '0.75rem', fontWeight: 700 }}
+                              onClick={handleCancelProcessing}
+                            >
+                              {t('sessions.cancelProcessingBtn')}
+                            </button>
+                          )}
                         </div>
                         {currentSession.audio && (
                           <audio controls src={URL.createObjectURL(currentSession.audio)} style={{ width: '100%', height: '40px' }} />
