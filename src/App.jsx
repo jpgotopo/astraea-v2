@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TranscriptionWorker from './workers/transcriptionWorker?worker';
 import { processAudioForModel, cleanIpaOutput, float32ToWav } from './utils/audioUtils';
 import { saveData, getAllData, deleteData, getDataById, exportBackup, importBackup } from './utils/db';
+import { ipaToOrthography } from './utils/orthography';
 
 import { useTranslation } from 'react-i18next';
 
@@ -372,6 +373,11 @@ function App() {
 
   const fileInputRef = useRef(null);
 
+  // The project's chosen reference alphabet decides whether/how the raw IPA
+  // transcript gets re-spelled into an approximate, more readable form.
+  const referenceAlphabet = currentProject?.referenceAlphabet || 'none';
+  const adaptedSpelling = ipaToOrthography(transcript, referenceAlphabet);
+
   const textAreaStyle = {
     width: '100%',
     background: 'var(--input-bg)',
@@ -475,6 +481,15 @@ function App() {
                 <div className="field-group" style={{ gridColumn: 'span 2' }}><label>{t('projects.description')}</label><textarea name="description" defaultValue={currentProject?.description} placeholder={t('projects.descriptionPlaceholder')} /></div>
                 <div className="field-group"><label>{t('projects.copyright')}</label><input name="copyright" defaultValue={currentProject?.copyright} placeholder={t('projects.copyrightPlaceholder')} /></div>
                 <div className="field-group"><label>{t('projects.responsible')}</label><input name="responsible" defaultValue={currentProject?.responsible} placeholder={t('projects.responsiblePlaceholder')} /></div>
+                <div className="field-group">
+                  <label>{t('projects.referenceAlphabet')}</label>
+                  <select name="referenceAlphabet" defaultValue={currentProject?.referenceAlphabet || 'none'}>
+                    <option value="none">{t('projects.referenceAlphabetNone')}</option>
+                    <option value="es">{t('projects.referenceAlphabetEs')}</option>
+                    <option value="id">{t('projects.referenceAlphabetId')}</option>
+                    <option value="en">{t('projects.referenceAlphabetEn')}</option>
+                  </select>
+                </div>
                 <button type="submit" className="btn-secondary primary" style={{ gridColumn: 'span 2', marginTop: '1.5rem' }}>{t('projects.updateBtn')}</button>
               </form>
             </section>
@@ -737,6 +752,16 @@ function App() {
                           a.download = `session_${currentSession.id}_translation.txt`;
                           a.click();
                         }} disabled={!translation}>{t('sessions.exportTranslBtn')}</button>
+                        {referenceAlphabet !== 'none' && (
+                          <button className="btn-secondary" onClick={() => {
+                            const blob = new Blob([adaptedSpelling], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `session_${currentSession.id}_adapted_spelling.txt`;
+                            a.click();
+                          }} disabled={!adaptedSpelling}>{t('sessions.exportAdaptedBtn')}</button>
+                        )}
                       </div>
                     </div>
 
@@ -793,6 +818,14 @@ function App() {
                                   style={textAreaStyle}
                                 />
                               </div>
+                              {referenceAlphabet !== 'none' && seg.transcript && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('sessions.adaptedSpellingLabel')}</label>
+                                  <div style={{ ...textAreaStyle, minHeight: 'auto', opacity: 0.85, fontStyle: 'italic' }}>
+                                    {ipaToOrthography(seg.transcript, referenceAlphabet)}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))
@@ -804,12 +837,19 @@ function App() {
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
                           <div className="ipa-box" style={{ flex: 1, padding: '1.5rem', fontSize: '1.2rem', textAlign: 'left', minHeight: '100px', display: 'block', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}>
-                            <div style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '0.5rem', textTransform: 'uppercase' }}>Transcription</div>
-                            {transcript || '[ No transcript yet ]'}
+                            <div style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '0.5rem', textTransform: 'uppercase' }}>{t('sessions.transcriptionLabel')}</div>
+                            {transcript || t('sessions.noTranscript')}
                           </div>
+                          {referenceAlphabet !== 'none' && (
+                            <div className="ipa-box" style={{ flex: 1, padding: '1.5rem', fontSize: '1.1rem', fontStyle: 'italic', textAlign: 'left', minHeight: '100px', display: 'block', color: 'var(--text-main)', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}>
+                              <div style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '0.5rem', textTransform: 'uppercase' }}>{t('sessions.adaptedSpellingLabel')}</div>
+                              {adaptedSpelling || t('sessions.noAdaptedSpelling')}
+                              <div style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '0.75rem', fontStyle: 'normal' }}>{t('sessions.adaptedSpellingHint')}</div>
+                            </div>
+                          )}
                           <div className="ipa-box" style={{ flex: 1, padding: '1.5rem', fontSize: '1.2rem', textAlign: 'left', minHeight: '100px', display: 'block', color: 'var(--text-main)', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}>
-                            <div style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '0.5rem', textTransform: 'uppercase' }}>Translation</div>
-                            {translation || '[ No translation yet ]'}
+                            <div style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '0.5rem', textTransform: 'uppercase' }}>{t('sessions.translationLabel')}</div>
+                            {translation || t('sessions.noTranslation')}
                           </div>
                         </div>
                       )}

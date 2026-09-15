@@ -328,3 +328,58 @@ tres botones nuevos en el encabezado):
     exactamente a los del archivo de respaldo (1/1/1), descartando los datos
     duplicados del paso anterior.
 - Regresión: alta/borrado de Personas sigue funcionando sin cambios.
+
+---
+
+## 🔤 Nueva funcionalidad: ortografía adaptada al alfabeto de referencia
+
+A pedido del usuario: además de la transcripción fonética (AFI), la app
+ahora puede mostrar una **aproximación en ortografía "normal"**, adaptada al
+alfabeto de referencia del proyecto (Español, Bahasa Indonesia o Inglés).
+
+**Importante — límite honesto de esta funcionalidad:** convertir AFI a
+ortografía real de una lengua requiere conocimiento fonológico y morfológico
+de esa lengua específica, que en documentación de lenguas no documentadas
+(el caso de uso central de Astraea) por definición no existe todavía. Por
+eso esto **no** es un conversor lingüísticamente riguroso — es una
+"re-deletreada" automática símbolo-por-símbolo del AFI a las convenciones de
+letras del alfabeto de referencia elegido, pensada como punto de partida
+legible para la comunidad o estudiantes que no leen AFI, **nunca** como
+sustituto de la transcripción fonética ni como ortografía práctica
+definitiva. Esto se explicita en la propia UI con un texto de advertencia.
+
+### Implementación
+
+- **`src/utils/orthography.js`** (nuevo): `ipaToOrthography(texto, alfabeto)`.
+  Tabla de sustitución símbolo→letra(s) para tres alfabetos de referencia
+  (`es`, `id`, `en`), con coincidencia de secuencias multi-símbolo primero
+  (diptongos, africadas) antes que símbolos sueltos, y remoción de marcas
+  sin letra propia (acento primario/secundario, alargamiento vocálico,
+  ligaduras). Sin dependencias nuevas.
+- **Nuevo campo de Proyecto**: "Alfabeto de Referencia" (`referenceAlphabet`:
+  ninguno / Español / Bahasa Indonesia / Inglés) — se elige una vez por
+  proyecto, según el idioma de referencia con el que la comunidad o el
+  equipo va a leer las transcripciones. Se usa esto en vez de intentar
+  adivinarlo del campo libre "País", que no es un valor controlado y sería
+  poco confiable para decidir automáticamente.
+- **UI de Sesiones**: cuando el proyecto tiene un alfabeto de referencia
+  distinto de "ninguno", aparece una tercera caja "Ortografía Adaptada"
+  (junto a Transcripción y Traducción) calculada en vivo a partir del AFI —
+  tanto en la vista simple como por cada segmento individual — más un botón
+  para exportarla como TXT.
+- De paso, se conectaron un par de claves de i18n para Transcripción/
+  Traducción/mensajes de "aún vacío" que ya existían en los archivos de
+  idioma pero no se usaban en el componente (estaban hardcodeadas en inglés).
+
+### ✅ Validación
+
+- `npm run lint` → 0 errores, 0 warnings.
+- `npm run build` → build de producción exitosa.
+- Prueba de extremo a extremo con Playwright: proyecto con
+  `referenceAlphabet: 'es'` + sesión con AFI conocido → aparece la caja
+  "Adapted Spelling"/"Ortografía Adaptada" con el texto convertido exacto
+  esperado y el aviso de advertencia; al cambiar el alfabeto del proyecto a
+  "ninguno" desde el propio formulario de la UI, la caja desaparece.
+- Regresión completa: alta/borrado de Personas, banner de error del motor
+  (red bloqueada), y exportar/combinar/reemplazar de respaldo — todo sigue
+  funcionando sin cambios.
